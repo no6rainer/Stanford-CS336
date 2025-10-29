@@ -8,10 +8,10 @@ from pretokenization_example import find_chunk_boundaries
 pretokenization_pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 base_dir = os.path.dirname(__file__)
-data_dir = os.path.join(base_dir, "..", "data", "test.txt")
+data_dir = os.path.join(base_dir, "..", "data", "TinyStoriesV2-GPT4-train.txt")
 print(data_dir)
 
-vocab_size = 1000
+vocab_size = 10000
 
 token_counts = Counter()
 with open(data_dir, "rb") as f:
@@ -166,7 +166,7 @@ while curr_vocab_size < vocab_size:
 
     # update the heap
     for changed_pair in changed_pairs:
-        push_pair(changed_pair, pair_count[pair])
+        push_pair(changed_pair, pair_count[changed_pair])
 
     curr_vocab_size += 1
 
