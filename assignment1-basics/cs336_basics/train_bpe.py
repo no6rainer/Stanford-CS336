@@ -51,9 +51,10 @@ def _reduce_counters(counters):
         out.update(c)
     return out
 
-def train_bpe(input_path: str | os.PathLike, 
-              vocab_size: int, 
-              special_tokens: list[str]
+def train_bpe(
+    input_path: str | os.PathLike, 
+    vocab_size: int, 
+    special_tokens: list[str]
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     
     with open(input_path, "rb") as f:
@@ -103,10 +104,15 @@ def train_bpe(input_path: str | os.PathLike,
     vocab: dict[int, bytes] = defaultdict(bytes)
     merges: list[tuple[bytes, bytes]] = []
     
-    for i in range(256):
-        vocab[i] = bytes([i])
+    for i, tok in enumerate(special_tokens):
+        vocab[i] = tok.encode("utf-8")
 
-    curr_vocab_size = 256
+    byte_offset = len(special_tokens)
+    for b in range(256):
+        vocab[byte_offset + b] = bytes([b])
+
+    curr_vocab_size = byte_offset + 256
+
     while bp_heap and curr_vocab_size < vocab_size:
         # handle tied max pairs and choose the lexicographically greatest pair
         next_pair, max_count = pop_max()
@@ -135,9 +141,8 @@ def train_bpe(input_path: str | os.PathLike,
         new_byte = first + second
         vocab[curr_vocab_size] = new_byte
         merges.append(pair)
-        # print(f"merging: {pair} -> {new_byte}")
 
-        token_set = pair_token_map[pair]
+        token_set = list(pair_token_map[pair])
 
         changed_pairs = set()
 
@@ -156,32 +161,39 @@ def train_bpe(input_path: str | os.PathLike,
             while i < len(token_bytes) - 1:
                 # scan the token for matches
                 if token_bytes[i] == first and token_bytes[i + 1] == second:
+                    pair_count[pair] -= token_count
+                    token_pair_count[pair] -= 1
+                    changed_pairs.add(pair)
 
                     # handle changes of the left pair
                     if i - 1 >= 0:
-                        left_pair = (token_bytes[i - 1], first)
+                        left_pair = (new_token_bytes[-1], first)
                         pair_count[left_pair] -= token_count
                         token_pair_count[left_pair] -= 1
                         changed_pairs.add(left_pair)
 
-                        new_left_pair = (token_bytes[i - 1], new_byte)
+                        new_left_pair = (new_token_bytes[-1], new_byte)
                         pair_count[new_left_pair] += token_count
+                        token_pair_count[new_left_pair] += 1
                         pair_token_map[new_left_pair].add(token)
                         changed_pairs.add(new_left_pair)
 
                     # handle changes of the right pair
                     if i + 2 <= len(token_bytes) - 1:
                         right_pair = (second, token_bytes[i + 2])
-                        pair_count[right_pair] += token_count
+                        pair_count[right_pair] -= token_count
                         token_pair_count[right_pair] -= 1
                         changed_pairs.add(right_pair)
 
                         new_right_pair = (new_byte, token_bytes[i + 2])
                         pair_count[new_right_pair] += token_count
+                        token_pair_count[new_right_pair] += 1
                         pair_token_map[new_right_pair].add(token)
                         changed_pairs.add(new_right_pair)
 
                     new_token_bytes.append(new_byte)
+                    if i == len(token_bytes) - 3:
+                        new_token_bytes.append(token_bytes[i + 2])
 
                     # if first != second: impossible for i + 1 pair to be a match 
                     # if first == second: skip the i + 1 pair to avoid duplicate counting
