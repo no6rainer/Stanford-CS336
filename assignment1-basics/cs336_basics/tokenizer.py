@@ -166,7 +166,47 @@ class Tokenizer:
         return tokenized
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
-        pass
+        buffer = ""
+        max_special_len = max((len(tok) for tok in self.special_tokens), default=0)
+        guard_len = max(0, max_special_len - 1)
+
+        for chunk in iterable:
+            buffer += chunk
+
+            parts = (
+                [p for p in self._special_token_re.split(buffer) if p]
+                if self._special_token_re is not None
+                else [buffer]
+            )
+
+            if not parts:
+                continue
+
+            for part in parts[:-1]:
+                if part in self._special_token_set:
+                    yield self.special_token_to_id[part]
+
+                else:
+                    yield from self.encode(part)
+
+            tail = parts[-1]
+
+            cut = max(0, len(tail) - guard_len) if guard_len > 0 else len(tail)
+            stable_prefix = tail[:cut]
+            guarded_suffix = tail[cut:]
+
+            pretoks = [m.group(0) for m in self._pretok_re.finditer(stable_prefix)]
+            emitted_text = "".join(pretoks[:-1])
+            unresolved_last_pretok = pretoks[-1] if pretoks else ""
+
+            if emitted_text:
+                yield from self.encode(emitted_text)
+
+            buffer = unresolved_last_pretok + guarded_suffix
+
+        if buffer:
+            yield from self.encode(buffer)
 
     def decode(self, ids: list[int]) -> str:
-        pass
+        all_bytes = b"".join(self.vocab[i] for i in ids)
+        return all_bytes.decode("utf-8", errors="replace")
